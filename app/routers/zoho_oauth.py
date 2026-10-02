@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Inbox, OAuthState, ZohoAccount
+from app.app_settings import get_zoho_oauth_credentials, save_zoho_oauth_credentials
 from app.settings_manager import settings
 from app.zoho_mail import (
     ZOHO_SCOPES,
@@ -32,12 +33,27 @@ callback_router = APIRouter(tags=["zoho-oauth"])
 
 @router.get("/api/zoho/status")
 async def zoho_status(db: AsyncSession = Depends(get_db)):
-    configured = bool(settings.zoho_client_id and settings.zoho_client_secret)
+    client_id, client_secret = await get_zoho_oauth_credentials(db)
     return {
-        "configured": configured,
+        "configured": bool(client_id and client_secret),
         "redirect_uri": settings.zoho_redirect_uri,
         "scopes": ZOHO_SCOPES,
     }
+
+
+@router.post("/api/zoho/config")
+async def save_zoho_config(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    client_id = str(payload.get("client_id") or "").strip()
+    client_secret = str(payload.get("client_secret") or "").strip()
+    if not client_id or not client_secret:
+        raise HTTPException(400, "Zoho Client ID and Client Secret are required.")
+    await save_zoho_oauth_credentials(db, client_id, client_secret)
+    await db.commit()
+    return {"ok": True, "configured": True, "redirect_uri": settings.zoho_redirect_uri}
 
 
 @router.get("/oauth/zoho/authorize")
@@ -53,8 +69,9 @@ async def zoho_authorize(
     db: AsyncSession = Depends(get_db),
     _user=Depends(get_current_user),
 ):
-    if not settings.zoho_client_id or not settings.zoho_client_secret:
-        raise HTTPException(400, "Zoho OAuth is not configured on this Quickly server.")
+    zoho_client_id, zoho_client_secret = await get_zoho_oauth_credentials(db)
+    if not zoho_client_id or not zoho_client_secret:
+        raise HTTPException(400, "Zoho OAuth is not configured. Add the Zoho OAuth app credentials in Quickly first.")
 
     csrf = secrets.token_urlsafe(32)
     metadata = {
@@ -76,7 +93,7 @@ async def zoho_authorize(
     await db.flush()
 
     state = json.dumps({**metadata, "_csrf": csrf})
-    url = build_authorize_url(state, settings.zoho_redirect_uri)
+    url = build_authorize_url(state, settings.zoho_redirect_uri, client_id=zoho_client_id)
     return RedirectResponse(url)
 
 
@@ -118,8 +135,12 @@ async def zoho_callback(
     await db.delete(row)
     await db.flush()
 
+    zoho_client_id, zoho_client_secret = await get_zoho_oauth_credentials(db)
+    if not zoho_client_id or not zoho_client_secret:
+        raise HTTPException(400, "Zoho OAuth is not configured.")
+
     try:
-        token_data = exchange_code(code, settings.zoho_redirect_uri)
+        token_data = exchange_code(code, settings.zoho_redirect_uri, client_id=zoho_client_id, client_secret=zoho_client_secret)
     except Exception as exc:
         log.exception("Zoho token exchange failed")
         raise HTTPException(502, f"Zoho token exchange failed: {exc}") from exc
