@@ -99,7 +99,7 @@ class Inbox(Base):
     max_emails_per_day = Column(Integer, default=50, nullable=False)
     wait_minutes_between = Column(Integer, default=5, nullable=False)  # Minutes between emails from this inbox
     max_jitter_seconds = Column(Integer, default=180, nullable=False)   # Max random seconds added to each send time (0 = disabled)
-    provider = Column(String(32), default="gmail")  # gmail | office365 | smtp
+    provider = Column(String(32), default="gmail")  # gmail | office365 | smtp | zoho
     # Custom tracking domain for this inbox (hostname only, e.g. "mail.client.com").
     # When set, open/click tracking URLs for emails sent from this inbox will use
     # https://<tracking_domain>/o/... instead of the app's own base URL.
@@ -130,7 +130,8 @@ class Inbox(Base):
     office365_graph_subscription = relationship("Office365GraphSubscription", back_populates="inbox", uselist=False, cascade="all, delete-orphan")
     smtp_account = relationship("SmtpAccount", back_populates="inbox", uselist=False, cascade="all, delete-orphan")
     zoho_account = relationship("ZohoAccount", back_populates="inbox", uselist=False, cascade="all, delete-orphan")
-    zoho_sync_state = relationship("ZohoSyncState", uselist=False, cascade="all, delete-orphan")
+    zoho_sync_state = relationship("ZohoSyncState", back_populates="inbox", uselist=False, cascade="all, delete-orphan")
+    zoho_threads = relationship("ZohoThread", back_populates="inbox", cascade="all, delete-orphan")
     smtp_sync_state = relationship("SmtpSyncState", uselist=False, cascade="all, delete-orphan")
     smtp_threads = relationship("SmtpThread", back_populates="inbox", cascade="all, delete-orphan")
 
@@ -756,6 +757,53 @@ class ZohoSyncState(Base):
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     inbox = relationship("Inbox")
+
+
+class ZohoThread(Base):
+    """Local Zoho Mail conversation/thread mirror."""
+    __tablename__ = "zoho_thread"
+    __table_args__ = (Index("ix_zoho_thread_inbox_last_date", "inbox_id", "last_received_at"),)
+    inbox_id = Column(Integer, ForeignKey("inbox.id"), primary_key=True)
+    thread_id = Column(String(128), primary_key=True)
+    subject = Column(Text, default="")
+    last_received_at = Column(DateTime, nullable=True)
+    is_lead_thread = Column(Boolean, default=False, nullable=False)
+    unread_lead_reply = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    inbox = relationship("Inbox", back_populates="zoho_threads")
+    messages = relationship("ZohoMessage", back_populates="thread", cascade="all, delete-orphan")
+
+
+class ZohoMessage(Base):
+    """Local Zoho Mail message mirror (received + sent)."""
+    __tablename__ = "zoho_message"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["inbox_id", "thread_id"],
+            ["zoho_thread.inbox_id", "zoho_thread.thread_id"],
+            name="fk_zoho_message_thread",
+            ondelete="CASCADE",
+        ),
+        Index("ix_zoho_message_inbox_thread_date", "inbox_id", "thread_id", "received_at"),
+        Index("ix_zoho_message_inbox_received", "inbox_id", "received_at"),
+    )
+    inbox_id = Column(Integer, ForeignKey("inbox.id"), primary_key=True)
+    message_id = Column(String(256), primary_key=True)
+    thread_id = Column(String(128), nullable=False)
+    received_at = Column(DateTime, nullable=True)
+    subject = Column(Text, default="")
+    from_address = Column(String(255), default="")
+    to_addresses = Column(Text, default="")
+    body_plain = Column(Text, default="")
+    body_html = Column(Text, default="")
+    is_read = Column(Boolean, default=False, nullable=False)
+    direction = Column(String(16), default="received", nullable=False)
+    folder_id = Column(String(128), default="")
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    inbox = relationship("Inbox")
+    thread = relationship("ZohoThread", back_populates="messages")
 
 
 class SmtpAccount(Base):
