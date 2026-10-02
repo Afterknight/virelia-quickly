@@ -631,6 +631,7 @@ async def delete_inbox(inbox_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/{inbox_id}/generate-connect-url", response_model=ConnectUrlResponse)
 async def generate_connect_url(
     inbox_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Generate a one-time URL to pre-authenticate the OAuth flow for this inbox.
@@ -651,7 +652,9 @@ async def generate_connect_url(
     inbox.connect_token_expires_at = utcnow() + timedelta(minutes=15)
     await db.flush()
 
-    base = app_settings.base_url.rstrip("/")
-    url = f"{base}/oauth/connect/{token}"
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    forwarded_proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    base = f"{forwarded_proto.split(',')[0].strip()}://{forwarded_host}" if forwarded_host else app_settings.base_url.rstrip("/")
+    url = f"{base.rstrip('/')}/oauth/connect/{token}"
     log.info("generate_connect_url: inbox %s token=%s…", inbox_id, token[:12])
     return ConnectUrlResponse(url=url)
