@@ -3665,7 +3665,7 @@ async def backfill_single_inbox(
     touched: set[tuple[int, str]] = set()
     try:
         async with AsyncSessionLocal() as db:
-            inbox_res = await db.execute(select(Inbox).where(Inbox.id == inbox_id, Inbox.provider.in_(["gmail", "office365", "smtp"])))
+            inbox_res = await db.execute(select(Inbox).where(Inbox.id == inbox_id, Inbox.provider.in_(["gmail", "office365", "smtp", "zoho"])))
             inbox = inbox_res.scalar_one_or_none()
             if not inbox:
                 await db.rollback()
@@ -3754,7 +3754,7 @@ async def queue_backfill_for_all_inboxes(
 ) -> None:
     async def _runner() -> None:
         async with AsyncSessionLocal() as db:
-            rows = await db.execute(select(Inbox.id).where(Inbox.provider.in_(["gmail", "office365", "smtp"])))
+            rows = await db.execute(select(Inbox.id).where(Inbox.provider.in_(["gmail", "office365", "smtp", "zoho"])))
             inbox_ids = [row[0] for row in rows.all()]
         for inbox_id in inbox_ids:
             await backfill_single_inbox(inbox_id, window_days=window_days, reason=reason)
