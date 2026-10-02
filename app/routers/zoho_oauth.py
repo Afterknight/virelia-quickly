@@ -237,7 +237,11 @@ async def zoho_callback(
     await db.flush()
 
     base = settings.base_url.rstrip("/")
-    target = f"{base}/inboxes?connected={urllib.parse.quote(', '.join(connected_emails))}"
+    connected_value = urllib.parse.quote(", ".join(connected_emails))
+    if state_data.get("source") == "connect_url":
+        target = f"{base}/oauth/connected?email={connected_value}"
+    else:
+        target = f"{base}/inboxes?connected={connected_value}"
     return RedirectResponse(target, status_code=303)
 
 
