@@ -88,10 +88,10 @@ class Settings:
         return f"{self.base_url.rstrip('/')}/oauth/office365/callback"
 
     @property
-    @property
     def zoho_redirect_uri(self) -> str:
         return f"{self.base_url.rstrip('/')}/oauth/zoho/callback"
 
+    @property
     def app_google_redirect_uri(self) -> str:
         return f"{self.base_url.rstrip('/')}/oauth/app/google/callback"
 
