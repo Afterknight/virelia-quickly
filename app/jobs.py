@@ -33,6 +33,7 @@ from app.models import (
     LeadReply,
     GmailAccount,
     Office365Account,
+    ZohoAccount,
     LeadUnsubscribeToken,
     GmailMessage,
     Office365Message,
@@ -299,10 +300,23 @@ async def run_send_job():
             gmail_token = ""
             ga = None
             o365_account = None
+            zoho_account = None
             smtp_account = None
             simulate_send = False
 
-            if inbox.provider == "office365":
+            if inbox.provider == "zoho":
+                zoho_res = await session.execute(
+                    select(ZohoAccount).where(ZohoAccount.inbox_id == inbox.id)
+                )
+                zoho_account = zoho_res.scalar_one_or_none()
+                if zoho_account is None:
+                    if settings.test_mode:
+                        log.info("Test mode: Zoho inbox %s (%s) has no ZohoAccount -- simulating send", inbox.id, inbox.email)
+                        simulate_send = True
+                    else:
+                        log.warning("Zoho inbox %s (%s) has no ZohoAccount — skipping", inbox.id, inbox.email)
+                        continue
+            elif inbox.provider == "office365":
                 o365_res = await session.execute(
                     select(Office365Account).where(Office365Account.inbox_id == inbox.id)
                 )
@@ -870,6 +884,8 @@ async def run_send_job():
                             office365_client_secret=o365_client_secret,
                             office365_tenant_id=o365_tenant_id,
                             conversation_id=prev_thread_id if inbox.provider == "office365" else None,
+                            zoho_account=zoho_account,
+
                             reply_graph_message_id=reply_graph_message_id if inbox.provider == "office365" else None,
                             smtp_account=smtp_account,
                         )
