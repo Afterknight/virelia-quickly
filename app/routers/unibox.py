@@ -239,6 +239,12 @@ async def send_unibox_email(data: UniboxSendRequest, db: AsyncSession = Depends(
                 reply_to = latest_msg.rfc_message_id
                 if not references:
                     references = reply_to
+    elif provider == "zoho":
+        zoho_row = await db.execute(select(ZohoAccount).where(ZohoAccount.inbox_id == inbox.id))
+        zoho_account = zoho_row.scalar_one_or_none()
+        if zoho_account is None:
+            raise HTTPException(status_code=400, detail="Zoho Mail account is not connected for this inbox")
+        reply_graph_message_id = None
     elif provider == "office365":
         from app.routers.office365_oauth import refresh_access_token as _refresh_o365
         o365_row = await db.execute(select(Office365Account).where(Office365Account.inbox_id == inbox.id))
@@ -326,6 +332,7 @@ async def send_unibox_email(data: UniboxSendRequest, db: AsyncSession = Depends(
         conversation_id=data.thread_id if provider == "office365" else None,
         reply_graph_message_id=reply_graph_message_id if provider == "office365" else None,
         smtp_account=smtp_account,
+        zoho_account=zoho_account,
     )
     if not send_result:
         raise HTTPException(status_code=502, detail="Send failed; message was not stored")
@@ -353,6 +360,10 @@ async def send_unibox_email(data: UniboxSendRequest, db: AsyncSession = Depends(
         )
         if smtp_msg:
             stored_message_id = smtp_msg.message_id
+    elif provider == "zoho":
+        # Zoho Sent folder is authoritative; the next Unibox sync imports the
+        # sent message with Zoho's real thread/message IDs.
+        stored_message_id = send_result.message_id
     elif provider == "office365":
         o365_msg = await upsert_sent_o365_message(
             db,
@@ -391,6 +402,14 @@ async def send_unibox_email(data: UniboxSendRequest, db: AsyncSession = Depends(
         smtp_ss = smtp_ss_row.scalar_one_or_none()
         if smtp_ss:
             smtp_ss.last_sync_at = utcnow()
+    elif provider == "zoho":
+        from app.models import ZohoSyncState
+        zoho_ss_row = await db.execute(
+            select(ZohoSyncState).where(ZohoSyncState.inbox_id == inbox.id)
+        )
+        zoho_ss = zoho_ss_row.scalar_one_or_none()
+        if zoho_ss:
+            zoho_ss.last_sync_at = utcnow()
     elif provider == "office365":
         from app.models import Office365SyncState
         o365_ss_row = await db.execute(
