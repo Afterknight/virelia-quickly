@@ -32,10 +32,10 @@ class ZohoAPIError(RuntimeError):
         self.body = body
 
 
-def build_authorize_url(state: str, redirect_uri: str) -> str:
+def build_authorize_url(state: str, redirect_uri: str, *, client_id: str | None = None) -> str:
     params = {
         "response_type": "code",
-        "client_id": settings.zoho_client_id,
+        "client_id": client_id or settings.zoho_client_id,
         "scope": ZOHO_SCOPES,
         "redirect_uri": redirect_uri,
         "access_type": "offline",
@@ -45,11 +45,11 @@ def build_authorize_url(state: str, redirect_uri: str) -> str:
     return f"{ZOHO_AUTH_URL}?{urllib.parse.urlencode(params)}"
 
 
-def exchange_code(code: str, redirect_uri: str) -> dict[str, Any]:
+def exchange_code(code: str, redirect_uri: str, *, client_id: str | None = None, client_secret: str | None = None) -> dict[str, Any]:
     return _token_request({
         "code": code,
-        "client_id": settings.zoho_client_id,
-        "client_secret": settings.zoho_client_secret,
+        "client_id": client_id or settings.zoho_client_id,
+        "client_secret": client_secret or settings.zoho_client_secret,
         "redirect_uri": redirect_uri,
         "grant_type": "authorization_code",
     })
@@ -211,6 +211,38 @@ def get_message_content(
     if isinstance(raw, dict):
         return str(raw.get("content") or raw.get("body") or "")
     return ""
+
+
+def send_reply(
+    account: ZohoAccount,
+    *,
+    message_id: str,
+    to_email: str,
+    subject: str,
+    content: str,
+    from_email: str,
+    from_name: str = "",
+    is_html: bool = False,
+) -> dict[str, Any]:
+    """Reply to a specific Zoho message using Zoho's native Reply API."""
+    token = ensure_access_token(account)
+    if not token:
+        raise ZohoAPIError(401, "No Zoho access token")
+
+    payload: dict[str, Any] = {
+        "fromAddress": f"{from_name} <{from_email}>" if from_name else from_email,
+        "toAddress": to_email,
+        "subject": subject,
+        "content": content,
+        "action": "reply",
+        "mailFormat": "html" if is_html else "plaintext",
+    }
+    return request(
+        "POST",
+        f"/accounts/{account.zoho_account_id}/messages/{message_id}",
+        token,
+        payload=payload,
+    )
 
 
 def send_message(
