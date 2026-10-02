@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, setAccessToken } from '../context/AuthContext';
 import { FileUploadArea } from '../components/ui/FileUploadArea';
 
 const BACKUP_MIN_PASSWORD_LEN = 8;
@@ -29,6 +29,10 @@ export default function Login() {
   const [restorePreviewBusy, setRestorePreviewBusy] = useState(false);
   const [restoreExecuteBusy, setRestoreExecuteBusy] = useState(false);
   const [restoreMsg, setRestoreMsg] = useState(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   const isFirstUser = setupComplete === false;
 
@@ -107,7 +111,76 @@ export default function Login() {
           </h2>
         </div>
 
-        <div className="mt-8 space-y-4">
+        <form
+          className="mt-8 space-y-4"
+          onSubmit={async e => {
+            e.preventDefault();
+            if (loginBusy) return;
+            setLoginBusy(true);
+            setLoginError('');
+            try {
+              const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ username, password }),
+              });
+              const text = await res.text();
+              let data;
+              try {
+                data = JSON.parse(text);
+              } catch {
+                data = { detail: text || res.statusText };
+              }
+              if (!res.ok) {
+                throw new Error(parseDetailMessage(text) || res.statusText || 'Login failed');
+              }
+              setAccessToken(data.access_token);
+              window.location.href = '/';
+            } catch (e) {
+              setLoginError(e.message || 'Invalid username or password');
+            } finally {
+              setLoginBusy(false);
+            }
+          }}
+        >
+          <input
+            type="text"
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            placeholder="Username"
+            autoComplete="username"
+            required
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="Password"
+            autoComplete="current-password"
+            required
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            type="submit"
+            disabled={loginBusy || !username || !password}
+            className="w-full py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loginBusy ? 'Signing in…' : 'Sign in'}
+          </button>
+          {loginError && (
+            <p className="text-center text-sm text-red-600">{loginError}</p>
+          )}
+        </form>
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="h-px flex-1 bg-gray-200" />
+          <span className="text-xs text-gray-400">or</span>
+          <div className="h-px flex-1 bg-gray-200" />
+        </div>
+
+        <div className="space-y-4">
           <a
             href="/oauth/app/google/authorize"
             className="w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
