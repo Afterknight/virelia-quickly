@@ -6,7 +6,7 @@ from app.models import WEBHOOK_EVENT_TYPES
 
 # Known inbox providers. "resend" is a legacy value still present on old rows
 # (gmail_oauth reverts disconnected Gmail inboxes to it), so it stays allowed.
-INBOX_PROVIDERS = Literal["gmail", "office365", "smtp", "resend"]
+INBOX_PROVIDERS = Literal["gmail", "office365", "zoho", "smtp", "resend"]
 
 
 class LeadCampaignInfo(BaseModel):
@@ -99,7 +99,7 @@ class InboxCreate(BaseModel):
     max_emails_per_day: int = 50
     wait_minutes_between: int = 5
     max_jitter_seconds: int = 180
-    provider: INBOX_PROVIDERS = "gmail"  # gmail | office365 | smtp
+    provider: INBOX_PROVIDERS = "gmail"  # gmail | office365 | zoho | smtp
     tracking_domain: Optional[str] = None  # custom hostname for tracking links
     ramp_up_enabled: bool = False
     ramp_up_period_days: int = 42
@@ -180,7 +180,7 @@ class PauseInboxRequest(BaseModel):
 
 class ConnectUrlRequest(BaseModel):
     """Parameters for generating a one-time OAuth connect URL for a new inbox."""
-    provider: str = "gmail"  # gmail | office365 (smtp inboxes need no OAuth)
+    provider: str = "gmail"  # gmail | office365 | zoho (smtp inboxes need no OAuth)
     display_name: str = ""
     max_per_day: int = 50
     wait_minutes_between: int = 5
