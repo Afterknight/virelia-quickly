@@ -54,6 +54,7 @@ async def zoho_status(request: Request, db: AsyncSession = Depends(get_db)):
 @router.post("/api/zoho/config")
 async def save_zoho_config(
     payload: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _user=Depends(get_current_user),
 ):
