@@ -206,6 +206,30 @@ async def _run_migrations(conn) -> None:
         "CREATE INDEX IF NOT EXISTS ix_smtp_message_inbox_thread_date ON smtp_message (inbox_id, thread_key, received_at)",
         "CREATE INDEX IF NOT EXISTS ix_smtp_message_inbox_received ON smtp_message (inbox_id, received_at)",
         "CREATE INDEX IF NOT EXISTS ix_smtp_message_rfc_id ON smtp_message (rfc_message_id)",
+        # 2026-10-02: Zoho Mail OAuth account storage
+        """
+        CREATE TABLE IF NOT EXISTS zoho_account (
+            id SERIAL PRIMARY KEY,
+            inbox_id INTEGER NOT NULL UNIQUE REFERENCES inbox(id) ON DELETE CASCADE,
+            zoho_email VARCHAR(255) NOT NULL,
+            zoho_account_id VARCHAR(128) NOT NULL,
+            access_token TEXT NOT NULL DEFAULT '',
+            refresh_token TEXT NOT NULL DEFAULT '',
+            token_expiry TIMESTAMP WITHOUT TIME ZONE,
+            scopes VARCHAR(1024) NOT NULL DEFAULT '',
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS zoho_sync_state (
+            id SERIAL PRIMARY KEY,
+            inbox_id INTEGER NOT NULL UNIQUE REFERENCES inbox(id) ON DELETE CASCADE,
+            last_sync_at TIMESTAMP WITHOUT TIME ZONE,
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+        )
+        """,
         # 2026-09-22: SMTP diagnose + send observability
         #   last_diagnostic_*: staged diagnostic report (Diagnose button / CLI)
         #   last_send_*:       last real send failure + timestamp (all failures,
