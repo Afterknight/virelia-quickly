@@ -323,6 +323,7 @@ async def send_unibox_email(data: UniboxSendRequest, db: AsyncSession = Depends(
             .where(
                 ZohoMessage.inbox_id == inbox.id,
                 ZohoMessage.thread_id == data.thread_id,
+                ZohoMessage.direction == "received",
             )
             .order_by(ZohoMessage.received_at.desc(), ZohoMessage.created_at.desc())
             .limit(1)
