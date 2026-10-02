@@ -230,6 +230,44 @@ async def _run_migrations(conn) -> None:
             updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
         )
         """,
+        # 2026-10-02: Zoho Mail Unibox thread/message mirrors
+        """
+        CREATE TABLE IF NOT EXISTS zoho_thread (
+            inbox_id INTEGER NOT NULL REFERENCES inbox(id) ON DELETE CASCADE,
+            thread_id VARCHAR(128) NOT NULL,
+            subject TEXT NOT NULL DEFAULT '',
+            last_received_at TIMESTAMP WITHOUT TIME ZONE,
+            is_lead_thread BOOLEAN NOT NULL DEFAULT FALSE,
+            unread_lead_reply BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            PRIMARY KEY (inbox_id, thread_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS zoho_message (
+            inbox_id INTEGER NOT NULL REFERENCES inbox(id) ON DELETE CASCADE,
+            message_id VARCHAR(256) NOT NULL,
+            thread_id VARCHAR(128) NOT NULL,
+            received_at TIMESTAMP WITHOUT TIME ZONE,
+            subject TEXT NOT NULL DEFAULT '',
+            from_address VARCHAR(255) NOT NULL DEFAULT '',
+            to_addresses TEXT NOT NULL DEFAULT '',
+            body_plain TEXT NOT NULL DEFAULT '',
+            body_html TEXT NOT NULL DEFAULT '',
+            is_read BOOLEAN NOT NULL DEFAULT FALSE,
+            direction VARCHAR(16) NOT NULL DEFAULT 'received',
+            folder_id VARCHAR(128) NOT NULL DEFAULT '',
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            PRIMARY KEY (inbox_id, message_id),
+            CONSTRAINT fk_zoho_message_thread FOREIGN KEY (inbox_id, thread_id)
+                REFERENCES zoho_thread(inbox_id, thread_id) ON DELETE CASCADE
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_zoho_thread_inbox_last_date ON zoho_thread (inbox_id, last_received_at)",
+        "CREATE INDEX IF NOT EXISTS ix_zoho_message_inbox_thread_date ON zoho_message (inbox_id, thread_id, received_at)",
+        "CREATE INDEX IF NOT EXISTS ix_zoho_message_inbox_received ON zoho_message (inbox_id, received_at)",
         # 2026-09-22: SMTP diagnose + send observability
         #   last_diagnostic_*: staged diagnostic report (Diagnose button / CLI)
         #   last_send_*:       last real send failure + timestamp (all failures,
