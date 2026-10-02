@@ -2908,7 +2908,21 @@ async def get_thread_messages(
                 ).all()
                 smtp_inbox_ids = [int(row[0]) for row in smtp_rows]
                 if not smtp_inbox_ids:
-                    return None
+                    zoho_rows = (
+                        await db.execute(
+                            select(ZohoMessage.inbox_id)
+                            .where(ZohoMessage.thread_id == thread_id)
+                            .distinct()
+                        )
+                    ).all()
+                    zoho_inbox_ids = [int(row[0]) for row in zoho_rows]
+                    if not zoho_inbox_ids:
+                        return None
+                    if len(zoho_inbox_ids) > 1:
+                        raise ValueError("thread_id exists in multiple inboxes; pass inbox_id explicitly")
+                    return await _get_zoho_thread_messages(
+                        db, thread_id=thread_id, inbox_id=zoho_inbox_ids[0]
+                    )
                 if len(smtp_inbox_ids) > 1:
                     raise ValueError("thread_id exists in multiple inboxes; pass inbox_id explicitly")
                 return await _get_smtp_thread_messages(db, thread_id=thread_id, inbox_id=smtp_inbox_ids[0])
