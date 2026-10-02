@@ -2134,7 +2134,7 @@ export default function Inboxes() {
                         : <Button variant="outline" size="sm" className="flex-1 bg-orange-50 text-orange-700 border-orange-300 hover:bg-orange-100" onClick={() => openPauseModal(selectedInbox)}>Pause</Button>
                       }
                     </div>
-                    {(selectedInbox.provider === 'gmail' || selectedInbox.provider === 'office365') && (
+                    {(selectedInbox.provider === 'gmail' || selectedInbox.provider === 'office365' || selectedInbox.provider === 'zoho') && (
                       <Button
                         variant="outline"
                         size="sm"
