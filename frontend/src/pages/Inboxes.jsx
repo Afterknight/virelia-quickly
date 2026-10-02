@@ -701,6 +701,8 @@ export default function Inboxes() {
   const [redirectUri, setRedirectUri] = useState('');
   const [o365Configured, setO365Configured] = useState(false);
   const [o365RedirectUri, setO365RedirectUri] = useState('');
+  const [zohoConfigured, setZohoConfigured] = useState(false);
+  const [zohoRedirectUri, setZohoRedirectUri] = useState('');
   const [editing, setEditing] = useState(null); // inbox being edited
   const [editDirty, setEditDirty] = useState(false);
   const [showEditWarning, setShowEditWarning] = useState(false);
@@ -822,6 +824,14 @@ export default function Inboxes() {
         setO365RedirectUri(d.redirect_uri || '');
       })
       .catch(() => {});
+    // check Zoho Mail OAuth
+    fetch('/api/zoho/status')
+      .then(r => r.json())
+      .then(d => {
+        setZohoConfigured(d.configured);
+        setZohoRedirectUri(d.redirect_uri || '');
+      })
+      .catch(() => {});
     // get server hostname for DNS instructions
     fetch('/api/settings/server-info')
       .then(r => r.json())
@@ -882,7 +892,7 @@ export default function Inboxes() {
   };
 
   const canSubmit = () => {
-    if (form.provider === 'gmail' || form.provider === 'office365') {
+    if (form.provider === 'gmail' || form.provider === 'office365' || form.provider === 'zoho') {
       // allow click so user receives an error message if OAuth is not configured
       return true;
     }
@@ -958,6 +968,26 @@ export default function Inboxes() {
       // redirect to Gmail OAuth
       const params = new URLSearchParams({ display_name: form.display_name, max_per_day: form.max_emails_per_day, ramp_up_enabled: form.ramp_up_enabled ? 'true' : 'false', ramp_up_start: form.ramp_up_start, ramp_up_step_size: form.ramp_up_step_size });
       window.location.href = '/oauth/google/authorize?' + params;
+      return;
+    }
+    if (form.provider === 'zoho') {
+      if (!zohoConfigured) {
+        setMessage({
+          type: 'error',
+          text: 'Zoho OAuth is not configured. Define ZOHO_CLIENT_ID/ZOHO_CLIENT_SECRET on the server and restart it.',
+        });
+        return;
+      }
+      const params = new URLSearchParams({
+        display_name: form.display_name,
+        max_per_day: form.max_emails_per_day,
+        wait_minutes_between: form.wait_minutes_between,
+        max_jitter_seconds: form.max_jitter_seconds,
+        ramp_up_enabled: form.ramp_up_enabled ? 'true' : 'false',
+        ramp_up_start: form.ramp_up_start,
+        ramp_up_step_size: form.ramp_up_step_size,
+      });
+      window.location.href = '/oauth/zoho/authorize?' + params;
       return;
     }
     if (form.provider === 'office365') {
@@ -1691,6 +1721,7 @@ export default function Inboxes() {
                       </div>
                       {editing.provider === 'gmail' && <RedirectUriBlock uri={redirectUri} />}
                       {editing.provider === 'office365' && <RedirectUriBlock uri={o365RedirectUri} />}
+                      {editing.provider === 'zoho' && <RedirectUriBlock uri={zohoRedirectUri} />}
                       {editing.provider === 'smtp' && (
                         <div className="border rounded p-3 space-y-3 bg-gray-50 min-w-0 max-w-full overflow-hidden">
                           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">SMTP / IMAP</p>
@@ -2150,6 +2181,7 @@ export default function Inboxes() {
                 <select name="provider" value={form.provider} onChange={handleProviderChange} className="mt-1 block w-full border-gray-300 rounded-md">
                   <option value="gmail">Gmail / Google Workspace</option>
                   <option value="office365">Office 365 / Outlook</option>
+                  <option value="zoho">Zoho Mail</option>
                   <option value="smtp">SMTP (any provider)</option>
                 </select>
               </div>
@@ -2396,6 +2428,13 @@ export default function Inboxes() {
                   <RedirectUriBlock uri={redirectUri} size="sm" />
                 </>
               )}
+              {form.provider === 'zoho' && (
+                <>
+                  {!zohoConfigured && <div className="text-red-600">Zoho OAuth credentials are not configured on the server.</div>}
+                  <p className="text-xs text-gray-500">You will be redirected to Zoho to authorize Quickly. No Zoho password or token is entered into Quickly.</p>
+                  <RedirectUriBlock uri={zohoRedirectUri} size="sm" />
+                </>
+              )}
               {form.provider === 'office365' && (
                 <>
                   {!o365Configured && (
@@ -2408,13 +2447,13 @@ export default function Inboxes() {
               )}
               <div className="flex gap-2">
                 <Button type="submit" disabled={!canSubmit()} variant="default">
-                  {form.provider === 'gmail' ? 'Connect with Google' : form.provider === 'office365' ? 'Connect with Microsoft' : 'Add inbox'}
+                  {form.provider === 'gmail' ? 'Connect with Google' : form.provider === 'office365' ? 'Connect with Microsoft' : form.provider === 'zoho' ? 'Connect with Zoho' : 'Add inbox'}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => { setShowAdd(false); setMessage(null); setAddTrackingMode('app'); setAddSmtpDiagnose(null); setAddSmtpSendTestMsg(null); setAddSmtpShowSendTest(false); }}>
                   Cancel
                 </Button>
               </div>
-              {(form.provider === 'gmail' || form.provider === 'office365') && (
+              {(form.provider === 'gmail' || form.provider === 'office365' || form.provider === 'zoho') && (
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="h-px flex-1 bg-gray-200" />
