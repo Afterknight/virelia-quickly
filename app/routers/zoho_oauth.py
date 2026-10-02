@@ -228,6 +228,8 @@ async def zoho_callback(
         account.refresh_token = refresh_token
         account.token_expiry = token_expiry
         account.scopes = token_data.get("scope", "") or ZOHO_SCOPES
+        account.oauth_client_id = zoho_client_id
+        account.oauth_client_secret = zoho_client_secret
         account.updated_at = datetime.utcnow()
         connected_emails.append(email)
         log.info("Zoho Mail OAuth connected: %s (inbox_id=%s)", email, inbox.id)
