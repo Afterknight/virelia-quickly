@@ -743,6 +743,8 @@ class ZohoAccount(Base):
     refresh_token = Column(EncryptedText, nullable=False)
     token_expiry = Column(DateTime, nullable=True)
     scopes = Column(String(1024), default="")
+    oauth_client_id = Column(String(255), nullable=True)
+    oauth_client_secret = Column(EncryptedText, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     inbox = relationship("Inbox", back_populates="zoho_account")
