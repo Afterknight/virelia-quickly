@@ -123,7 +123,7 @@ async def mark_unibox_thread_read(
     return {"ok": True, "thread_id": thread_id}
 
 
-_SYNC_PROVIDERS = ("gmail", "office365", "smtp")
+_SYNC_PROVIDERS = ("gmail", "office365", "smtp", "zoho")
 
 
 @router.post("/sync")
