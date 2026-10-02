@@ -756,7 +756,7 @@ class ZohoSyncState(Base):
     last_sync_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
-    inbox = relationship("Inbox")
+    inbox = relationship("Inbox", back_populates="zoho_sync_state")
 
 
 class ZohoThread(Base):
