@@ -50,6 +50,10 @@ class Settings:
         self.office365_client_id: str = os.getenv("OFFICE365_CLIENT_ID", "")
         self.office365_client_secret: str = os.getenv("OFFICE365_CLIENT_SECRET", "")
         self.office365_tenant_id: str = os.getenv("OFFICE365_TENANT_ID", "common")
+
+        # Zoho Mail OAuth (India data center)
+        self.zoho_client_id: str = os.getenv("ZOHO_CLIENT_ID", "")
+        self.zoho_client_secret: str = os.getenv("ZOHO_CLIENT_SECRET", "")
         
         # Background job interval
         self.queue_check_interval_minutes: int = 1
@@ -84,6 +88,10 @@ class Settings:
         return f"{self.base_url.rstrip('/')}/oauth/office365/callback"
 
     @property
+    @property
+    def zoho_redirect_uri(self) -> str:
+        return f"{self.base_url.rstrip('/')}/oauth/zoho/callback"
+
     def app_google_redirect_uri(self) -> str:
         return f"{self.base_url.rstrip('/')}/oauth/app/google/callback"
 
