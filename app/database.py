@@ -85,6 +85,9 @@ async def _run_migrations(conn) -> None:
         return
 
     pg_alters = [
+        # 2026-10-02: persist Zoho OAuth app credentials so token refresh works without env vars
+        "ALTER TABLE zoho_account ADD COLUMN IF NOT EXISTS oauth_client_id VARCHAR(255) NULL",
+        "ALTER TABLE zoho_account ADD COLUMN IF NOT EXISTS oauth_client_secret TEXT NULL",
         # 2026-03-24: ramp-up starting number (default 1 preserves old behaviour)
         "ALTER TABLE inbox ADD COLUMN IF NOT EXISTS ramp_up_start INTEGER NOT NULL DEFAULT 1",
         # 2026-03-24: track when ramp-up was last enabled (NULL = use created_at as fallback)
