@@ -17,7 +17,6 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Inbox, OAuthState, ZohoAccount
 from app.app_settings import get_zoho_oauth_credentials, save_zoho_oauth_credentials
-from app.settings_manager import settings
 from app.zoho_mail import (
     ZOHO_SCOPES,
     build_authorize_url,
@@ -31,12 +30,23 @@ router = APIRouter(tags=["zoho-oauth"])
 callback_router = APIRouter(tags=["zoho-oauth"])
 
 
+def _public_base_url(request: Request) -> str:
+    """Return the externally visible Quickly base URL behind a reverse proxy."""
+    forwarded_host = request.headers.get("x-forwarded-host")
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    if forwarded_host:
+        proto = (forwarded_proto or "https").split(",")[0].strip()
+        host = forwarded_host.split(",")[0].strip()
+        return f"{proto}://{host}"
+    return str(request.base_url).rstrip("/")
+
+
 @router.get("/api/zoho/status")
 async def zoho_status(request: Request, db: AsyncSession = Depends(get_db)):
     client_id, client_secret = await get_zoho_oauth_credentials(db)
     return {
         "configured": bool(client_id and client_secret),
-        "redirect_uri": request.base_url.replace(path="/oauth/zoho/callback").unicode_string().rstrip("/"),
+        "redirect_uri": _public_base_url(request) + "/oauth/zoho/callback",
         "scopes": ZOHO_SCOPES,
     }
 
@@ -53,11 +63,12 @@ async def save_zoho_config(
         raise HTTPException(400, "Zoho Client ID and Client Secret are required.")
     await save_zoho_oauth_credentials(db, client_id, client_secret)
     await db.commit()
-    return {"ok": True, "configured": True, "redirect_uri": settings.zoho_redirect_uri}
+    return {"ok": True, "configured": True, "redirect_uri": _public_base_url(request) + "/oauth/zoho/callback"}
 
 
 @router.get("/oauth/zoho/authorize")
 async def zoho_authorize(
+    request: Request,
     display_name: str = "",
     max_per_day: int = 50,
     wait_minutes_between: int = 5,
@@ -66,7 +77,6 @@ async def zoho_authorize(
     ramp_up_enabled: bool = False,
     ramp_up_start: int = 1,
     ramp_up_step_size: int = 1,
-    request: Request,
     db: AsyncSession = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -94,7 +104,7 @@ async def zoho_authorize(
     await db.flush()
 
     state = json.dumps({**metadata, "_csrf": csrf})
-    zoho_redirect_uri = str(request.base_url).rstrip('/') + '/oauth/zoho/callback'
+    zoho_redirect_uri = _public_base_url(request) + '/oauth/zoho/callback'
     url = build_authorize_url(state, zoho_redirect_uri, client_id=zoho_client_id)
     return RedirectResponse(url)
 
@@ -142,7 +152,7 @@ async def zoho_callback(
         raise HTTPException(400, "Zoho OAuth is not configured.")
 
     try:
-        zoho_redirect_uri = str(request.base_url).rstrip('/') + '/oauth/zoho/callback'
+        zoho_redirect_uri = _public_base_url(request) + '/oauth/zoho/callback'
         token_data = exchange_code(code, zoho_redirect_uri, client_id=zoho_client_id, client_secret=zoho_client_secret)
     except Exception as exc:
         log.exception("Zoho token exchange failed")
@@ -241,7 +251,7 @@ async def zoho_callback(
         raise HTTPException(502, "Zoho returned no usable mail accounts.")
     await db.flush()
 
-    base = settings.base_url.rstrip("/")
+    base = _public_base_url(request)
     connected_value = urllib.parse.quote(", ".join(connected_emails))
     if state_data.get("source") == "connect_url":
         target = f"{base}/oauth/connected?email={connected_value}"
