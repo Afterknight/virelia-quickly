@@ -538,6 +538,7 @@ def refresh_access_token(
 @router.post("/api/oauth/connect-url", response_model=ConnectUrlResponse)
 async def generate_connect_url_new_inbox(
     data: ConnectUrlRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -569,8 +570,10 @@ async def generate_connect_url_new_inbox(
     db.add(pending)
     await db.flush()
 
-    base = settings.base_url.rstrip("/")
-    url = f"{base}/oauth/connect/{token}"
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    forwarded_proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    base = f"{forwarded_proto.split(',')[0].strip()}://{forwarded_host}" if forwarded_host else settings.base_url.rstrip("/")
+    url = f"{base.rstrip('/')}/oauth/connect/{token}"
     log.info("generate_connect_url (new): token=%s… provider=%s", token[:12], data.provider)
     return ConnectUrlResponse(url=url)
 
@@ -703,7 +706,11 @@ async def oauth_connect_redirect(
         ))
         await db.flush()
         from app.zoho_mail import build_authorize_url
-        url = build_authorize_url(state_data, settings.zoho_redirect_uri, client_id=client_id)
+        forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        forwarded_proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+        public_base = f"{forwarded_proto.split(',')[0].strip()}://{forwarded_host}" if forwarded_host else settings.base_url.rstrip("/")
+        zoho_redirect_uri = f"{public_base.rstrip('/')}/oauth/zoho/callback"
+        url = build_authorize_url(state_data, zoho_redirect_uri, client_id=client_id)
         return RedirectResponse(url)
 
     elif provider == "office365":
