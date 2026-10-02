@@ -155,6 +155,64 @@ def get_accounts(account: ZohoAccount) -> list[dict[str, Any]]:
     return raw if isinstance(raw, list) else []
 
 
+def get_folders(account: ZohoAccount) -> list[dict[str, Any]]:
+    token = ensure_access_token(account)
+    if not token:
+        raise ZohoAPIError(401, "No Zoho access token")
+    data = request("GET", f"/accounts/{account.zoho_account_id}/folders", token)
+    raw = data.get("data", data)
+    return raw if isinstance(raw, list) else []
+
+
+def list_messages(
+    account: ZohoAccount,
+    *,
+    folder_id: str,
+    start: int = 1,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    token = ensure_access_token(account)
+    if not token:
+        raise ZohoAPIError(401, "No Zoho access token")
+    data = request(
+        "GET",
+        f"/accounts/{account.zoho_account_id}/messages/view",
+        token,
+        params={
+            "folderId": folder_id,
+            "start": max(1, int(start)),
+            "limit": min(200, max(1, int(limit))),
+            "status": "all",
+            "sortBy": "date",
+            "sortorder": "false",
+            "includeto": "true",
+        },
+    )
+    raw = data.get("data", data)
+    return raw if isinstance(raw, list) else []
+
+
+def get_message_content(
+    account: ZohoAccount,
+    *,
+    folder_id: str,
+    message_id: str,
+) -> str:
+    token = ensure_access_token(account)
+    if not token:
+        raise ZohoAPIError(401, "No Zoho access token")
+    data = request(
+        "GET",
+        f"/accounts/{account.zoho_account_id}/folders/{folder_id}/messages/{message_id}/content",
+        token,
+        params={"includeBlockContent": "true"},
+    )
+    raw = data.get("data", data)
+    if isinstance(raw, dict):
+        return str(raw.get("content") or raw.get("body") or "")
+    return ""
+
+
 def send_message(
     account: ZohoAccount,
     *,
