@@ -703,6 +703,9 @@ export default function Inboxes() {
   const [o365RedirectUri, setO365RedirectUri] = useState('');
   const [zohoConfigured, setZohoConfigured] = useState(false);
   const [zohoRedirectUri, setZohoRedirectUri] = useState('');
+  const [zohoClientId, setZohoClientId] = useState('');
+  const [zohoClientSecret, setZohoClientSecret] = useState('');
+  const [zohoConfigSaving, setZohoConfigSaving] = useState(false);
   const [editing, setEditing] = useState(null); // inbox being edited
   const [editDirty, setEditDirty] = useState(false);
   const [showEditWarning, setShowEditWarning] = useState(false);
@@ -889,6 +892,28 @@ export default function Inboxes() {
 
   const handleProviderChange = (e) => {
     handleChange(e);
+  };
+
+  const saveZohoConfig = async () => {
+    const clientId = zohoClientId.trim();
+    const clientSecret = zohoClientSecret.trim();
+    if (!clientId || !clientSecret) {
+      setMessage({ type: 'error', text: 'Enter the Zoho Client ID and Client Secret first.' });
+      return;
+    }
+    setZohoConfigSaving(true);
+    setMessage(null);
+    try {
+      const res = await api.post('/zoho/config', { client_id: clientId, client_secret: clientSecret });
+      setZohoConfigured(!!res.configured);
+      setZohoRedirectUri(res.redirect_uri || zohoRedirectUri);
+      setZohoClientSecret('');
+      setMessage({ type: 'success', text: 'Zoho OAuth app configured. You can now connect with Zoho.' });
+    } catch (e) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setZohoConfigSaving(false);
+    }
   };
 
   const canSubmit = () => {
@@ -1536,6 +1561,8 @@ export default function Inboxes() {
       window.location.href = '/oauth/google/authorize?' + params;
     } else if (inbox.provider === 'office365') {
       window.location.href = '/oauth/office365/authorize?' + params;
+    } else if (inbox.provider === 'zoho') {
+      window.location.href = '/oauth/zoho/authorize?' + params;
     }
   };
 
@@ -2430,7 +2457,32 @@ export default function Inboxes() {
               )}
               {form.provider === 'zoho' && (
                 <>
-                  {!zohoConfigured && <div className="text-red-600">Zoho OAuth credentials are not configured on the server.</div>}
+                  {!zohoConfigured && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                      <p className="text-sm font-medium text-amber-900">One-time Zoho OAuth app setup</p>
+                      <p className="text-xs text-amber-800">
+                        Create a Zoho Server-based Application, then paste its Client ID and Client Secret here. Quickly stores the secret encrypted in its database; you do not need to edit server environment variables.
+                      </p>
+                      <input
+                        value={zohoClientId}
+                        onChange={(e) => setZohoClientId(e.target.value)}
+                        placeholder="Zoho Client ID"
+                        className="w-full border rounded px-2.5 py-2 text-sm bg-white"
+                        autoComplete="off"
+                      />
+                      <input
+                        type="password"
+                        value={zohoClientSecret}
+                        onChange={(e) => setZohoClientSecret(e.target.value)}
+                        placeholder="Zoho Client Secret"
+                        className="w-full border rounded px-2.5 py-2 text-sm bg-white"
+                        autoComplete="new-password"
+                      />
+                      <Button type="button" size="sm" onClick={saveZohoConfig} disabled={zohoConfigSaving}>
+                        {zohoConfigSaving ? 'Saving…' : 'Save Zoho OAuth app'}
+                      </Button>
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500">You will be redirected to Zoho to authorize Quickly. No Zoho password or token is entered into Quickly.</p>
                   <RedirectUriBlock uri={zohoRedirectUri} size="sm" />
                 </>
