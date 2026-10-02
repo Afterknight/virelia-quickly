@@ -19,6 +19,10 @@ if db_url.startswith("postgres://"):
 elif db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+# asyncpg does not accept libpq's sslmode keyword. Convert it to asyncpg's ssl parameter.
+if "sslmode=" in db_url:
+    db_url = db_url.replace("sslmode=", "ssl=")
+
 # If the database URL refers to SQLite we need the StaticPool/"
 # check_same_thread" combination so that an in-memory database survives
 # across multiple connections.  This is primarily for the test suite when
