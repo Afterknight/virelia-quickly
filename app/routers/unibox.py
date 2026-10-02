@@ -217,6 +217,7 @@ async def send_unibox_email(data: UniboxSendRequest, db: AsyncSession = Depends(
     gmail_account = None
     o365_account = None
     smtp_account = None
+    zoho_account = None
     o365_client_id = o365_client_secret = o365_tenant_id = ""
     reply_to = data.in_reply_to
     references = data.references
