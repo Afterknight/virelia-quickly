@@ -32,11 +32,11 @@ callback_router = APIRouter(tags=["zoho-oauth"])
 
 
 @router.get("/api/zoho/status")
-async def zoho_status(db: AsyncSession = Depends(get_db)):
+async def zoho_status(request: Request, db: AsyncSession = Depends(get_db)):
     client_id, client_secret = await get_zoho_oauth_credentials(db)
     return {
         "configured": bool(client_id and client_secret),
-        "redirect_uri": settings.zoho_redirect_uri,
+        "redirect_uri": request.base_url.replace(path="/oauth/zoho/callback").unicode_string().rstrip("/"),
         "scopes": ZOHO_SCOPES,
     }
 
@@ -66,6 +66,7 @@ async def zoho_authorize(
     ramp_up_enabled: bool = False,
     ramp_up_start: int = 1,
     ramp_up_step_size: int = 1,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _user=Depends(get_current_user),
 ):
@@ -93,7 +94,8 @@ async def zoho_authorize(
     await db.flush()
 
     state = json.dumps({**metadata, "_csrf": csrf})
-    url = build_authorize_url(state, settings.zoho_redirect_uri, client_id=zoho_client_id)
+    zoho_redirect_uri = str(request.base_url).rstrip('/') + '/oauth/zoho/callback'
+    url = build_authorize_url(state, zoho_redirect_uri, client_id=zoho_client_id)
     return RedirectResponse(url)
 
 
@@ -140,7 +142,8 @@ async def zoho_callback(
         raise HTTPException(400, "Zoho OAuth is not configured.")
 
     try:
-        token_data = exchange_code(code, settings.zoho_redirect_uri, client_id=zoho_client_id, client_secret=zoho_client_secret)
+        zoho_redirect_uri = str(request.base_url).rstrip('/') + '/oauth/zoho/callback'
+        token_data = exchange_code(code, zoho_redirect_uri, client_id=zoho_client_id, client_secret=zoho_client_secret)
     except Exception as exc:
         log.exception("Zoho token exchange failed")
         raise HTTPException(502, f"Zoho token exchange failed: {exc}") from exc
