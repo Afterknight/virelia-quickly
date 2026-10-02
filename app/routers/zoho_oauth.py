@@ -151,76 +151,72 @@ async def zoho_callback(
     if not accounts:
         raise HTTPException(400, "Zoho OAuth succeeded, but no Zoho Mail account was returned.")
 
-    # Prefer an account with a usable email address.
-    selected = next(
-        (
-            a for a in accounts
-            if (a.get("emailAddress") or a.get("email") or a.get("mailId"))
-        ),
-        accounts[0],
-    )
-    email = (
-        selected.get("emailAddress")
-        or selected.get("email")
-        or selected.get("mailId")
-        or ""
-    ).strip().lower()
-    account_id = str(
-        selected.get("accountId")
-        or selected.get("accountid")
-        or selected.get("id")
-        or ""
-    )
-    if not email or not account_id:
-        raise HTTPException(502, "Zoho returned an account without email/account ID.")
+    # A single Zoho OAuth grant may expose multiple mail accounts for the
+    # authorized user. Connect every usable account returned by Zoho.
+    connected_emails: list[str] = []
+    for selected in accounts:
+        email = (
+            selected.get("emailAddress")
+            or selected.get("email")
+            or selected.get("mailId")
+            or ""
+        ).strip().lower()
+        account_id = str(
+            selected.get("accountId")
+            or selected.get("accountid")
+            or selected.get("id")
+            or ""
+        )
+        if not email or not account_id:
+            continue
 
-    # Reuse an existing inbox if the address is already connected.
-    inbox = (await db.execute(
-        select(Inbox).where(Inbox.email == email)
-    )).scalar_one_or_none()
-
-    if inbox:
-        inbox.provider = "zoho"
-        if state_data.get("display_name"):
-            inbox.display_name = state_data["display_name"]
-        account = (await db.execute(
-            select(ZohoAccount).where(ZohoAccount.inbox_id == inbox.id)
+        inbox = (await db.execute(
+            select(Inbox).where(Inbox.email == email)
         )).scalar_one_or_none()
-        if account is None:
+
+        if inbox:
+            inbox.provider = "zoho"
+            account = (await db.execute(
+                select(ZohoAccount).where(ZohoAccount.inbox_id == inbox.id)
+            )).scalar_one_or_none()
+            if account is None:
+                account = ZohoAccount(inbox_id=inbox.id)
+                db.add(account)
+        else:
+            inbox = Inbox(
+                email=email,
+                display_name=(state_data.get("display_name") if len(accounts) == 1 else None) or email.split("@")[0],
+                max_emails_per_day=int(state_data.get("max_per_day", 50)),
+                wait_minutes_between=int(state_data.get("wait_minutes_between", 5)),
+                max_jitter_seconds=int(state_data.get("max_jitter_seconds", 180)),
+                provider="zoho",
+                tracking_domain=state_data.get("tracking_domain") or None,
+                ramp_up_enabled=bool(state_data.get("ramp_up_enabled", False)),
+                ramp_up_start=int(state_data.get("ramp_up_start", 1)),
+                ramp_up_step_size=int(state_data.get("ramp_up_step_size", 1)),
+                ramp_up_started_at=datetime.utcnow() if state_data.get("ramp_up_enabled") else None,
+            )
+            db.add(inbox)
+            await db.flush()
             account = ZohoAccount(inbox_id=inbox.id)
             db.add(account)
-    else:
-        inbox = Inbox(
-            email=email,
-            display_name=state_data.get("display_name") or email.split("@")[0],
-            max_emails_per_day=int(state_data.get("max_per_day", 50)),
-            wait_minutes_between=int(state_data.get("wait_minutes_between", 5)),
-            max_jitter_seconds=int(state_data.get("max_jitter_seconds", 180)),
-            provider="zoho",
-            tracking_domain=state_data.get("tracking_domain") or None,
-            ramp_up_enabled=bool(state_data.get("ramp_up_enabled", False)),
-            ramp_up_start=int(state_data.get("ramp_up_start", 1)),
-            ramp_up_step_size=int(state_data.get("ramp_up_step_size", 1)),
-            ramp_up_started_at=datetime.utcnow() if state_data.get("ramp_up_enabled") else None,
-        )
-        db.add(inbox)
-        await db.flush()
-        account = ZohoAccount(inbox_id=inbox.id)
-        db.add(account)
 
-    account.zoho_email = email
-    account.zoho_account_id = account_id
-    account.access_token = access_token
-    account.refresh_token = refresh_token
-    account.token_expiry = token_expiry
-    account.scopes = token_data.get("scope", "") or ZOHO_SCOPES
-    account.updated_at = datetime.utcnow()
+        account.zoho_email = email
+        account.zoho_account_id = account_id
+        account.access_token = access_token
+        account.refresh_token = refresh_token
+        account.token_expiry = token_expiry
+        account.scopes = token_data.get("scope", "") or ZOHO_SCOPES
+        account.updated_at = datetime.utcnow()
+        connected_emails.append(email)
+        log.info("Zoho Mail OAuth connected: %s (inbox_id=%s)", email, inbox.id)
+
+    if not connected_emails:
+        raise HTTPException(502, "Zoho returned no usable mail accounts.")
     await db.flush()
 
-    log.info("Zoho Mail OAuth connected: %s (inbox_id=%s)", email, inbox.id)
-
     base = settings.base_url.rstrip("/")
-    target = f"{base}/inboxes?connected={urllib.parse.quote(email)}"
+    target = f"{base}/inboxes?connected={urllib.parse.quote(', '.join(connected_emails))}"
     return RedirectResponse(target, status_code=303)
 
 
