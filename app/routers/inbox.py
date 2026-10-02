@@ -643,7 +643,7 @@ async def generate_connect_url(
     inbox = result.scalar_one_or_none()
     if not inbox:
         raise HTTPException(404, "Inbox not found")
-    if inbox.provider not in ("gmail", "office365"):
+    if inbox.provider not in ("gmail", "office365", "zoho"):
         raise HTTPException(400, f"Cannot generate connect URL for provider '{inbox.provider}'")
 
     token = secrets.token_urlsafe(32)
