@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AppSetting
 from app.settings_manager import settings
+from app.security import encrypt, decrypt
 
 log = logging.getLogger("quickly.app_settings")
 
@@ -27,6 +28,8 @@ GLOBAL_RECALC_FINISHED_AT_KEY = "global_recalc_finished_at"
 GMAIL_PUSH_TOPIC_KEY = "gmail_push_topic"
 GMAIL_PUSH_WEBHOOK_TOKEN_KEY = "gmail_push_webhook_token"
 GMAIL_REPLY_SYNC_INTERVAL_MINUTES_KEY = "gmail_reply_sync_interval_minutes"
+ZOHO_CLIENT_ID_KEY = "zoho_client_id"
+ZOHO_CLIENT_SECRET_KEY = "zoho_client_secret"
 
 # custom tracking domain (hostname only, e.g. "mail.yourclient.com")
 TRACKING_DOMAIN_KEY = "tracking_domain"
@@ -95,6 +98,23 @@ async def save_google_oauth_credentials(db: AsyncSession, client_id: str, client
     log.warning("save_google_oauth_credentials called but persistence is disabled; "
                 "credentials must be set via environment variables")
     # intentionally do not write anything to the database
+
+
+# Zoho OAuth convenience ------------------------------------------------------
+
+async def get_zoho_oauth_credentials(db: AsyncSession | None = None) -> tuple[str, str]:
+    """Return Zoho OAuth app credentials from the database, falling back to env."""
+    client_id = (await get_setting(db, ZOHO_CLIENT_ID_KEY) or "").strip() if db else ""
+    client_secret_raw = (await get_setting(db, ZOHO_CLIENT_SECRET_KEY) or "") if db else ""
+    client_secret = decrypt(client_secret_raw).strip() if client_secret_raw else ""
+    return client_id or settings.zoho_client_id, client_secret or settings.zoho_client_secret
+
+
+async def save_zoho_oauth_credentials(db: AsyncSession, client_id: str, client_secret: str) -> None:
+    """Persist the Zoho OAuth app credentials; the secret is encrypted at rest."""
+    await put_setting(db, ZOHO_CLIENT_ID_KEY, client_id.strip())
+    await put_setting(db, ZOHO_CLIENT_SECRET_KEY, encrypt(client_secret.strip()))
+    await db.flush()
 
 
 # Test mode convenience --------------------------------------------------------
