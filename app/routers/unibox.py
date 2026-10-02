@@ -16,8 +16,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import GmailAccount, GmailMessage, GmailSyncState, Inbox, Office365Account, Office365Message, SmtpAccount, SmtpMessage
+from app.models import GmailAccount, GmailMessage, GmailSyncState, Inbox, Office365Account, Office365Message, SmtpAccount, SmtpMessage, ZohoAccount, ZohoMessage
 from app.app_settings import get_office365_oauth_credentials
+from app.zoho_mail import send_reply as zoho_send_reply, ZohoAPIError
 from app.sender import SendResult, send_email
 from app.time import utcnow
 from app.unibox import (
@@ -313,8 +314,52 @@ async def send_unibox_email(data: UniboxSendRequest, db: AsyncSession = Depends(
                 if reply_to and not references:
                     references = reply_to
 
-    send_result = await asyncio.to_thread(
-        send_email,
+    # Zoho has a native Reply API. Use the real Zoho message ID so replies
+    # stay in the provider's thread instead of merely sending a new message
+    # with a matching subject.
+    if provider == "zoho" and data.thread_id:
+        latest_zoho_row = await db.execute(
+            select(ZohoMessage)
+            .where(
+                ZohoMessage.inbox_id == inbox.id,
+                ZohoMessage.thread_id == data.thread_id,
+            )
+            .order_by(ZohoMessage.received_at.desc(), ZohoMessage.created_at.desc())
+            .limit(1)
+        )
+        latest_zoho_msg = latest_zoho_row.scalar_one_or_none()
+        if not latest_zoho_msg:
+            raise HTTPException(status_code=404, detail="No Zoho message found in this thread to reply to")
+        try:
+            reply_result = await asyncio.to_thread(
+                zoho_send_reply,
+                zoho_account,
+                message_id=latest_zoho_msg.message_id,
+                to_email=str(data.to_email),
+                subject=data.subject,
+                content=data.body,
+                from_email=inbox.email,
+                from_name=inbox.display_name or "",
+                is_html=data.is_html,
+            )
+        except ZohoAPIError as exc:
+            raise HTTPException(status_code=502, detail=f"Zoho reply failed: {exc}") from exc
+        raw_reply = reply_result.get("data", reply_result)
+        provider_message_id = ""
+        if isinstance(raw_reply, dict):
+            provider_message_id = str(
+                raw_reply.get("messageId")
+                or raw_reply.get("messageID")
+                or raw_reply.get("message_id")
+                or ""
+            )
+        send_result = SendResult(
+            message_id=provider_message_id or f"zoho-reply-{secrets.token_hex(12)}",
+            thread_id=data.thread_id,
+        )
+    else:
+        send_result = await asyncio.to_thread(
+            send_email,
         to_email=data.to_email,
         subject=data.subject,
         body=data.body,
