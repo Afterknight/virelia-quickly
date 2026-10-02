@@ -60,8 +60,8 @@ def refresh_access_token(account: ZohoAccount) -> str | None:
         return None
     try:
         data = _token_request({
-            "client_id": settings.zoho_client_id,
-            "client_secret": settings.zoho_client_secret,
+            "client_id": getattr(account, "oauth_client_id", None) or settings.zoho_client_id,
+            "client_secret": getattr(account, "oauth_client_secret", None) or settings.zoho_client_secret,
             "refresh_token": account.refresh_token,
             "grant_type": "refresh_token",
         })
