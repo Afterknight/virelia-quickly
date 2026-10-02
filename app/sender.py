@@ -36,9 +36,10 @@ except Exception:  # pragma: no cover - optional dependency
 
 from app.settings_manager import settings
 from app import time as time_provider
-from app.models import GmailAccount, Office365Account, SmtpAccount
+from app.models import GmailAccount, Office365Account, SmtpAccount, ZohoAccount
 from app.routers.gmail_oauth import refresh_access_token  # needed for token refresh when sending via gmail
 from app.routers.office365_oauth import refresh_access_token as refresh_office365_token
+from app.zoho_mail import ZohoAPIError, send_message as zoho_send_message, ensure_access_token as zoho_ensure_access_token, refresh_access_token as refresh_zoho_access_token
 
 log = logging.getLogger("quickly.sender")
 
@@ -644,6 +645,73 @@ def _send_via_gmail(
         return None
 
 
+def _send_via_zoho(
+    to_email: str,
+    subject: str,
+    body: str,
+    from_email: str,
+    from_name: str = "",
+    is_html: bool = False,
+    zoho_account: ZohoAccount | None = None,
+    list_unsubscribe_url: Optional[str] = None,
+    list_unsubscribe_one_click: bool = True,
+) -> Optional[SendResult | SendFailure]:
+    """Send through the Zoho Mail API using a stored OAuth refresh token."""
+    if not zoho_account:
+        return SendFailure(error_type="auth_failed", message="No Zoho Mail account")
+    try:
+        if not zoho_ensure_access_token(zoho_account):
+            return SendFailure(error_type="auth_failed", message="Zoho access token unavailable")
+        result = zoho_send_message(
+            zoho_account,
+            to_email=to_email,
+            subject=subject,
+            content=body,
+            from_email=from_email,
+            from_name=from_name,
+            is_html=is_html,
+        )
+        data = result.get("data", result)
+        message_id = str(data.get("messageId") or data.get("messageID") or "") if isinstance(data, dict) else ""
+        return SendResult(
+            message_id=message_id if message_id.startswith("<") else make_msgid(),
+            thread_id=message_id or None,
+        )
+    except ZohoAPIError as exc:
+        if exc.status_code == 401 and refresh_zoho_access_token(zoho_account):
+            try:
+                result = zoho_send_message(
+                    zoho_account,
+                    to_email=to_email,
+                    subject=subject,
+                    content=body,
+                    from_email=from_email,
+                    from_name=from_name,
+                    is_html=is_html,
+                )
+                data = result.get("data", result)
+                message_id = str(data.get("messageId") or data.get("messageID") or "") if isinstance(data, dict) else ""
+                return SendResult(
+                    message_id=message_id if message_id.startswith("<") else make_msgid(),
+                    thread_id=message_id or None,
+                )
+            except ZohoAPIError as retry_exc:
+                exc = retry_exc
+        if exc.status_code in (400, 404):
+            return SendFailure(error_type="bounce", message=f"Zoho Mail rejected the message ({exc.status_code}): {exc.body[:300]}")
+        if exc.status_code in (401, 403):
+            return SendFailure(
+                error_type="auth_failed" if exc.status_code == 401 else "permission_denied",
+                message=f"Zoho Mail auth/permission error ({exc.status_code}): {exc.body[:300]}",
+            )
+        if exc.status_code == 429 or exc.status_code >= 500:
+            return None
+        return SendFailure(error_type="permission_denied", message=f"Zoho Mail API error ({exc.status_code}): {exc.body[:300]}")
+    except Exception:
+        log.exception("Zoho Mail send failed")
+        return None
+
+
 def send_email(
     to_email: str,
     subject: str,
@@ -666,6 +734,7 @@ def send_email(
     office365_client_secret: str = "",
     office365_tenant_id: str = "",
     conversation_id: Optional[str] = None,
+    zoho_account: Optional[ZohoAccount] = None,
     reply_graph_message_id: Optional[str] = None,
     smtp_account: Optional[SmtpAccount] = None,
 ) -> Optional[SendResult | SendFailure]:
@@ -716,6 +785,22 @@ def send_email(
             references=references,
             is_html=is_html,
             smtp_account=smtp_account,
+            list_unsubscribe_url=list_unsubscribe_url,
+            list_unsubscribe_one_click=list_unsubscribe_one_click,
+        )
+
+    if provider == "zoho":
+        if not zoho_account:
+            log.error("send_email: no Zoho Mail credentials for %s", from_email)
+            return SendFailure(error_type="auth_failed", message="No Zoho Mail credentials provided")
+        return _send_via_zoho(
+            to_email=to_email,
+            subject=subject,
+            body=body,
+            from_email=from_email,
+            from_name=from_name,
+            is_html=is_html,
+            zoho_account=zoho_account,
             list_unsubscribe_url=list_unsubscribe_url,
             list_unsubscribe_one_click=list_unsubscribe_one_click,
         )
