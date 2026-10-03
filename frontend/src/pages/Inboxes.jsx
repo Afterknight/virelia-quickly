@@ -2457,32 +2457,40 @@ export default function Inboxes() {
               )}
               {form.provider === 'zoho' && (
                 <>
-                  {!zohoConfigured && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
-                      <p className="text-sm font-medium text-amber-900">One-time Zoho OAuth app setup</p>
-                      <p className="text-xs text-amber-800">
-                        Create a Zoho Server-based Application, then paste its Client ID and Client Secret here. Quickly stores the secret encrypted in its database; you do not need to edit server environment variables.
-                      </p>
-                      <input
-                        value={zohoClientId}
-                        onChange={(e) => setZohoClientId(e.target.value)}
-                        placeholder="Zoho Client ID"
-                        className="w-full border rounded px-2.5 py-2 text-sm bg-white"
-                        autoComplete="off"
-                      />
-                      <input
-                        type="password"
-                        value={zohoClientSecret}
-                        onChange={(e) => setZohoClientSecret(e.target.value)}
-                        placeholder="Zoho Client Secret"
-                        className="w-full border rounded px-2.5 py-2 text-sm bg-white"
-                        autoComplete="new-password"
-                      />
-                      <Button type="button" size="sm" onClick={saveZohoConfig} disabled={zohoConfigSaving}>
-                        {zohoConfigSaving ? 'Saving…' : 'Save Zoho OAuth app'}
-                      </Button>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-gray-900">Zoho OAuth app credentials</p>
+                      {zohoConfigured && (
+                        <span className="text-[11px] font-medium text-green-700">Saved</span>
+                      )}
                     </div>
-                  )}
+                    <p className="text-xs text-gray-600">
+                      Enter the Client ID and Client Secret for your Zoho Server-based Application. These credentials are stored encrypted in Quickly. You do not need to set Zoho OAuth credentials as server environment variables.
+                    </p>
+                    <input
+                      value={zohoClientId}
+                      onChange={(e) => setZohoClientId(e.target.value)}
+                      placeholder={zohoConfigured ? 'Zoho Client ID (leave blank to keep saved)' : 'Zoho Client ID'}
+                      className="w-full border rounded px-2.5 py-2 text-sm bg-white"
+                      autoComplete="off"
+                    />
+                    <input
+                      type="password"
+                      value={zohoClientSecret}
+                      onChange={(e) => setZohoClientSecret(e.target.value)}
+                      placeholder={zohoConfigured ? 'Zoho Client Secret (leave blank to keep saved)' : 'Zoho Client Secret'}
+                      className="w-full border rounded px-2.5 py-2 text-sm bg-white"
+                      autoComplete="new-password"
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button type="button" size="sm" variant="outline" onClick={saveZohoConfig} disabled={zohoConfigSaving || !zohoClientId.trim() || !zohoClientSecret.trim()}>
+                        {zohoConfigSaving ? 'Saving…' : zohoConfigured ? 'Replace saved credentials' : 'Save Zoho OAuth app'}
+                      </Button>
+                      {zohoConfigured && !zohoClientId.trim() && !zohoClientSecret.trim() && (
+                        <span className="text-[11px] text-gray-500">Saved credentials will be used when you connect.</span>
+                      )}
+                    </div>
+                  </div>
                   <p className="text-xs text-gray-500">You will be redirected to Zoho to authorize Quickly. No Zoho password or token is entered into Quickly.</p>
                   <RedirectUriBlock uri={zohoRedirectUri} size="sm" />
                 </>
