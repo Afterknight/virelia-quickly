@@ -999,7 +999,7 @@ export default function Inboxes() {
       if (!zohoConfigured) {
         setMessage({
           type: 'error',
-          text: 'Zoho OAuth is not configured. Define ZOHO_CLIENT_ID/ZOHO_CLIENT_SECRET on the server and restart it.',
+          text: 'Zoho OAuth is not configured. Enter the Zoho Client ID and Client Secret in the Zoho credentials section above, then save them.',
         });
         return;
       }
