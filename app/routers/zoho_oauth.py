@@ -190,18 +190,26 @@ async def zoho_callback(
     # authorized user. Connect every usable account returned by Zoho.
     connected_emails: list[str] = []
     for selected in accounts:
-        email = (
+        # Zoho may return emailAddress as either a string or a list of
+        # addresses (for example when an account has aliases). Normalize it
+        # before using it as the Quickly inbox email.
+        raw_email = (
             selected.get("emailAddress")
             or selected.get("email")
             or selected.get("mailId")
             or ""
-        ).strip().lower()
+        )
+        if isinstance(raw_email, list):
+            raw_email = next((item for item in raw_email if isinstance(item, str) and item.strip()), "")
+        elif isinstance(raw_email, dict):
+            raw_email = raw_email.get("address") or raw_email.get("email") or ""
+        email = str(raw_email).strip().lower()
         account_id = str(
             selected.get("accountId")
             or selected.get("accountid")
             or selected.get("id")
             or ""
-        )
+        ).strip()
         if not email or not account_id:
             continue
 
