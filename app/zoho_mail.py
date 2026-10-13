@@ -20,6 +20,7 @@ ZOHO_MAIL_ROOT = "https://mail.zoho.in/api"
 
 ZOHO_SCOPES = (
     "ZohoMail.accounts.READ "
+    "ZohoMail.folders.READ "
     "ZohoMail.messages.CREATE "
     "ZohoMail.messages.READ"
 )
