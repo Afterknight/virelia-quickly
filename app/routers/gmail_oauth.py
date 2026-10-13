@@ -581,6 +581,7 @@ async def generate_connect_url_new_inbox(
 @callback_router.get("/oauth/connect/{token}")
 async def oauth_connect_redirect(
     token: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Validate a one-time connect token and redirect to the OAuth consent screen."""
