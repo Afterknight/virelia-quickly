@@ -200,9 +200,17 @@ async def zoho_callback(
             or ""
         )
         if isinstance(raw_email, list):
-            raw_email = next((item for item in raw_email if isinstance(item, str) and item.strip()), "")
+            normalized_emails = []
+            for item in raw_email:
+                if isinstance(item, str) and item.strip():
+                    normalized_emails.append(item.strip())
+                elif isinstance(item, dict):
+                    candidate = item.get("address") or item.get("email") or item.get("mailId")
+                    if isinstance(candidate, str) and candidate.strip():
+                        normalized_emails.append(candidate.strip())
+            raw_email = normalized_emails[0] if normalized_emails else ""
         elif isinstance(raw_email, dict):
-            raw_email = raw_email.get("address") or raw_email.get("email") or ""
+            raw_email = raw_email.get("address") or raw_email.get("email") or raw_email.get("mailId") or ""
         email = str(raw_email).strip().lower()
         account_id = str(
             selected.get("accountId")
@@ -257,7 +265,11 @@ async def zoho_callback(
         log.info("Zoho Mail OAuth connected: %s (inbox_id=%s)", email, inbox.id)
 
     if not connected_emails:
-        raise HTTPException(502, "Zoho returned no usable mail accounts.")
+        log.error(
+            "Zoho returned account records but none had a usable email/account ID; record_keys=%s",
+            [sorted(str(key) for key in item.keys()) for item in accounts if isinstance(item, dict)],
+        )
+        raise HTTPException(400, "Zoho returned account details Quickly could not recognize. Check runtime logs for the returned field names.")
     await db.flush()
 
     base = _public_base_url(request)
